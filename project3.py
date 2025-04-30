@@ -88,11 +88,60 @@ def load( index_filename , csv_filename ):
                 print(f"Error: Invalid format in line {line_num}: '{line}'")
                 continue
         
-def print_index():
-    print()
+def print_index( filename , file_handle = None ):
+    if not os.path.exists( filename ):
+        print(f"Error: Index file '{filename}' does not exist.")
+        return
+    
+    with open( filename , 'rb' ) as f:
+        if f.read(8) != b'4348PRJ3':
+            print( "ERROR : Not a valid index file." )
+            return
+        
+        root_id = int.from_bytes( f.read(8) , 'big' )
+        if root_id == 0:
+            print( "Index is empty." )
+            return
+        
+        def traverse( f , block_id ):
+            block = read_block( f , block_id )
+            num_keys = int.from_bytes( block[16:24] , 'big' )
 
-def extract():
-    print()
+            keys = [int.from_bytes(block[24 + i*8 : 32 + i*8], 'big') for i in range(num_keys)]
+            values = [int.from_bytes(block[176 + i*8 : 184 + i*8], 'big') for i in range(num_keys)]
+            children = [int.from_bytes(block[328 + i*8 : 336 + i*8], 'big') for i in range(num_keys + 1)]
+
+            for i in range( num_keys ):
+                if children[0] != 0:
+                    if children[i] != 0:
+                        traverse( f , children[i] )
+                line = f"{keys[i]},{values[i]}"
+                if file_handle:
+                    file_handle.write( line + '\n' )
+                else:
+                    print( line )
+            if children[0] != 0 and children[num_keys] != 0:
+                traverse( f , children[num_keys] )
+        
+        traverse( f , root_id)
+
+
+def extract( index_filename , csv_filename ):
+    if not os.path.exists( index_filename ):
+        print(f"Error: Index file '{index_filename}' does not exist.")
+        return
+    
+    if os.path.exists(csv_filename):
+        print(f"Error: Output file '{csv_filename}' already exists.")
+        return
+    
+    with open( index_filename , 'rb' ) as f:
+        if f.read(8) != b'4348PRJ3':
+            print( "ERROR : Not a valid index file." )
+            return
+        
+    with open( csv_filename , 'w' ) as outfile:
+        print_index( index_filename , outfile )
 
 def main():
     command = sys.argv[1]
